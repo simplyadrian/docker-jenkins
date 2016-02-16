@@ -1,0 +1,123 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description>This builds a Jenkins server container image and pushes the Docker image to AWS ECR.&#xd;
+</description>
+  <logRotator class="hudson.tasks.LogRotator">
+    <daysToKeep>-1</daysToKeep>
+    <numToKeep>10</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>-1</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github@1.17.0">
+      <projectUrl>https://github.com/simplyadrian/docker-jenkins/</projectUrl>
+      <displayName></displayName>
+    </com.coravy.hudson.plugins.github.GithubProjectProperty>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>JENKINS_VERSION</name>
+          <description></description>
+          <defaultValue>latest</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@2.4.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>git@github.com:simplyadrian/docker-jenkins.git</url>
+        <credentialsId></credentialsId>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>*/master</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>true</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/bin/bash
+
+get_latest_tag()
+{
+    # Note: If you are doing this on non-private repos, you will need this instead
+    # local all_tags=$(curl &quot;$url&quot;)
+    all_tags=$(curl -H &quot;Authorization: token $GITHUB_TOKEN&quot; &quot;$url&quot;)
+    latest_tag_version=$(echo &quot;$all_tags&quot; | jq -r &apos;.[0] | .name&apos;)
+
+    echo &quot;Latest tagged version is $latest_tag_version&quot;
+}
+
+# Make sure JENKINS_VERSION is a tagged version, ie convert &quot;latest&quot; to the latest tag
+if [ &quot;$JENKINS_VERSION&quot; = &quot;latest&quot; ]; then
+    # Set the GitHub API URL for Jenkins release tags
+    url=https://api.github.com/repos/simplyadrian/docker-jenkins/tags
+    get_latest_tag
+    IS_LATEST=true
+    JENKINS_VERSION=&quot;$latest_tag_version&quot;
+fi
+
+# Build the Docker image and get the image id
+image_id=$(docker build -t jenkins:&quot;$JENKINS_VERSION&quot; . | tail -1 | grep &quot;Successfully built&quot; | awk &apos;{print $3}&apos;)
+
+# If we got no image id, FAIL
+if [ -z &quot;$image_id&quot; ]; then
+    echo &quot;Error: No image id, so probably no image was built. Exiting.&quot;
+    exit 1
+fi
+
+# Now tag the image and push it to the AWS ECR repository
+$(aws ecr get-login --region us-east-1)
+ecr_account=&quot;056684691971.dkr.ecr.us-east-1.amazonaws.com&quot;
+docker tag &quot;$image_id&quot; &quot;$ecr_account&quot;/jenkins:&quot;$JENKINS_VERSION&quot;
+docker push &quot;$ecr_account&quot;/jenkins:&quot;$JENKINS_VERSION&quot;
+
+# If we also built the latest version, then tag and push that as well
+if [ &quot;$IS_LATEST&quot; = true ]; then
+    docker tag &quot;$image_id&quot; &quot;$ecr_account&quot;/jenkins:latest
+    docker push &quot;$ecr_account&quot;/jenkins:latest
+fi
+
+# Clean up, so images don&apos;t lay around
+docker rmi -f $image_id
+</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <jenkins.plugins.hipchat.HipChatNotifier plugin="hipchat@1.0.0">
+      <token></token>
+      <room></room>
+      <startJobMessage></startJobMessage>
+      <completeJobMessage></completeJobMessage>
+    </jenkins.plugins.hipchat.HipChatNotifier>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.28">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+    <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.6">
+      <bindings>
+        <org.jenkinsci.plugins.credentialsbinding.impl.StringBinding>
+          <credentialsId></credentialsId>
+          <variable>GITHUB_TOKEN</variable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.StringBinding>
+      </bindings>
+    </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
+  </buildWrappers>
+</project>

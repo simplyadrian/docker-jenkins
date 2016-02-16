@@ -1,0 +1,84 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <logRotator class="hudson.tasks.LogRotator">
+    <daysToKeep>-1</daysToKeep>
+    <numToKeep>10</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>-1</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>JENKINS_URL</name>
+          <description>The local url from which you are retrieving the jobs xml from for promotion.</description>
+          <defaultValue>http://localhost:8080</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>JENKINS_REMOTE_URL</name>
+          <description>the url of the down stream jenkins server you are promoting your job too.</description>
+          <defaultValue>https://cloudengineering.jenkins.svc.io</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -ex
+export JENKINS_USER=`echo $JENKINS_CREDENTIALS | cut -d: -f 1`
+export JENKINS_PASS=`echo $JENKINS_CREDENTIALS | cut -d: -f 2`
+
+execJenkinsCli(){ # excute jenkins-cli jar 
+	JENKINS_CLI_JAR=/var/jenkins_home/war/WEB-INF/jenkins-cli.jar
+    cmd_prefix=&quot;java -jar ${JENKINS_CLI_JAR}&quot;
+    cli_cmd=$3
+    cli_params=$4
+
+    ${cmd_prefix} -s ${JENKINS_URL} who-am-i | grep &apos;Authenticated as: anonymous&apos; &amp;&gt;/dev/null &amp;&amp; anon=0
+    #anon=$?
+    if [ &quot;$anon&quot; != &quot;0&quot; ]; then
+    	#printf &quot;[ $FUNCNAME ] using jenkins-cli with private key auth&quot;
+        ${cmd_prefix} -s ${JENKINS_URL} $cli_cmd $cli_params
+    elif [ &quot;x&quot; = &quot;x${JENKINS_USER}&quot; ] || [ &quot;x&quot;  = &quot;x${JENKINS_PASS}&quot; ]; then
+        printf &quot;[ $FUNCNAME ] cannot determine jenkins credentials\n&quot;;
+        exit 3;
+    else
+        ${cmd_prefix} ${cli_cmd} ${cli_params} --username ${JENKINS_USER} --password ${JENKINS_PASS}
+    fi
+}
+
+execJenkinsCli -s ${JENKINS_URL} list-plugins | awk &apos;{print $1}&apos; | while read line; do
+  echo &quot;Processing $line&quot;
+  execJenkinsCli -s ${JENKINS_URL} install-plugin $line
+done
+</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.28">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+    <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.6">
+      <bindings>
+        <org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordBinding>
+          <credentialsId></credentialsId>
+          <variable>JENKINS_CREDENTIALS</variable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordBinding>
+      </bindings>
+    </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
+  </buildWrappers>
+</project>

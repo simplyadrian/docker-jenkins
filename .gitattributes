@@ -1,0 +1,3 @@
+# Always check out scripts with unix-style line endings
+*.sh text eol=lf
+plugins.txt text eol=lf

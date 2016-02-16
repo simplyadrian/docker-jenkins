@@ -1,0 +1,111 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <logRotator class="hudson.tasks.LogRotator">
+    <daysToKeep>-1</daysToKeep>
+    <numToKeep>10</numToKeep>
+    <artifactDaysToKeep>-1</artifactDaysToKeep>
+    <artifactNumToKeep>-1</artifactNumToKeep>
+  </logRotator>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github@1.15.0">
+      <projectUrl>https://github.com/simplyadrian/ansible-pb-jenkins-base/</projectUrl>
+      <displayName></displayName>
+    </com.coravy.hudson.plugins.github.GithubProjectProperty>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>ENVIRON</name>
+          <description>The environment that you are deploying a build/deploy server. ex: dev, test, stage, prod</description>
+          <defaultValue>dev</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>PLAYBOOK_VERSION</name>
+          <description>The version of ansible-pb-jenkins-base to deploy</description>
+          <defaultValue>0.1.5</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>SUBPRODUCT_TAG</name>
+          <description>The role the jenkins server will play. Currently supports build | deploy</description>
+          <defaultValue>build</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>PRODUCT</name>
+          <description>The project or product you are deploying a jenkins server to manage. i.e. fulfillment, docengine, etc...</description>
+          <defaultValue>cloudengineering</defaultValue>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>REPO_URL</name>
+          <description></description>
+          <defaultValue>git@github.com:simplyadrian/ansible-pb-jenkins-base.git</defaultValue>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.plugins.git.GitSCM" plugin="git@2.4.1">
+    <configVersion>2</configVersion>
+    <userRemoteConfigs>
+      <hudson.plugins.git.UserRemoteConfig>
+        <url>$REPO_URL</url>
+      </hudson.plugins.git.UserRemoteConfig>
+    </userRemoteConfigs>
+    <branches>
+      <hudson.plugins.git.BranchSpec>
+        <name>refs/tags/0.1.5</name>
+      </hudson.plugins.git.BranchSpec>
+    </branches>
+    <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+    <submoduleCfg class="list"/>
+    <extensions/>
+  </scm>
+  <canRoam>true</canRoam>
+  <disabled>true</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.tasks.Shell>
+      <command>#!/usr/bin/env bash
+set -ex
+export AWS_ACCESS_KEY_ID=`echo $AWS_KEYS | cut -d: -f 1`
+export AWS_SECRET_ACCESS_KEY=`echo $AWS_KEYS | cut -d: -f 2`
+
+ansible-galaxy install -r requirements.yml -p ./roles
+
+export ANSIBLE_FORCE_COLOR=true
+export PYTHONUNBUFFERED=1
+
+ANSIBLE_TEMPLATE_TEMPDIR=tmp
+
+if [ ! -d &quot;$ANSIBLE_TEMPLATE_TEMPDIR&quot; ]; then mkdir $ANSIBLE_TEMPLATE_TEMPDIR; fi
+
+ansible-playbook -i inventory -e &quot;environ=$ENVIRON playbook_version=$PLAYBOOK_VERSION product=$PRODUCT subproduct_tag=$SUBPRODUCT_TAG&quot; docker-host-cfn.yml</command>
+    </hudson.tasks.Shell>
+  </builders>
+  <publishers>
+    <jenkins.plugins.hipchat.HipChatNotifier plugin="hipchat@1.0.0">
+      <token></token>
+      <room></room>
+      <startJobMessage>$STATUS deploy of Jenkins build server for $PRODUCT. Using the playbook version $PLAYBOOK_VERSION.  ($CHANGES_OR_CAUSE) (&lt;a href=&quot;$URL&quot;&gt;Open&lt;/a&gt;) $JOB_NAME #$BUILD_NUMBER </startJobMessage>
+      <completeJobMessage>$STATUS deploy of Jenkins build server for $PRODUCT. Using the playbook version $PLAYBOOK_VERSION after $DURATION (&lt;a href=&quot;$URL&quot;&gt;Open&lt;/a&gt;) $JOB_NAME #$BUILD_NUMBER </completeJobMessage>
+    </jenkins.plugins.hipchat.HipChatNotifier>
+  </publishers>
+  <buildWrappers>
+    <hudson.plugins.ws__cleanup.PreBuildCleanup plugin="ws-cleanup@0.28">
+      <deleteDirs>false</deleteDirs>
+      <cleanupParameter></cleanupParameter>
+      <externalDelete></externalDelete>
+    </hudson.plugins.ws__cleanup.PreBuildCleanup>
+    <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.6">
+      <bindings>
+        <org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordBinding>
+          <credentialsId></credentialsId>
+          <variable>AWS_KEYS</variable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordBinding>
+      </bindings>
+    </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
+  </buildWrappers>
+</project>

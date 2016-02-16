@@ -1,0 +1,6 @@
+.bash_history
+.java
+*.swp
+.DS_Store
+.idea
+*.iml
