@@ -1,4 +1,4 @@
-FROM jenkins:1.642.1
+FROM jenkins:1.651.1
 
 MAINTAINER aherrera and acyost
 
@@ -29,7 +29,7 @@ RUN apt-get update &&\
 
 RUN pip install \
     awscli \
-    ansible==1.9.4 \
+    ansible \
     credstash \
     boto &&\
     #jenkins user sudo
